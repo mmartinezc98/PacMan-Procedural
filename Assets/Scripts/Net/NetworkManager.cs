@@ -6,6 +6,20 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
+/// <summary>
+/// Gestiona la conexion de red con .NET puro (System.Net.Sockets).
+/// Equivalente a RedController.cs del ejercicio de Photon pero con TCP.
+///
+/// HOST  -> crea TcpListener, espera al cliente, genera la semilla y la envia.
+/// CLIENTE -> se conecta con TcpClient, recibe la semilla y genera el mismo mapa.
+///
+/// Mensajes enviados (JSON simple):
+///   {"type":"seed","value":12345}
+///   {"type":"pos","x":1.5,"y":0.5,"z":3.2}
+///   {"type":"state","invisible":false,"coins":3}
+///   {"type":"event","name":"ghostWins"}
+///   {"type":"event","name":"pacmanWins"}
+/// </summary>
 public class NetworkManager : MonoBehaviour
 {
     #region VARIABLES
@@ -238,6 +252,14 @@ public class NetworkManager : MonoBehaviour
     /// </summary>
     private void ProcessMessage(string msg)
     {
+        // Comprobamos que los singletons esten listos antes de usarlos
+        // Si no lo estan, volvemos a encolar el mensaje para el siguiente frame
+        if (GameState.Instance == null || MazeGenerator.Instance == null)
+        {
+            lock (_queueLock) { _messageQueue.Enqueue(msg); }
+            return;
+        }
+
         try
         {
             if (msg.Contains("\"type\":\"seed\""))
