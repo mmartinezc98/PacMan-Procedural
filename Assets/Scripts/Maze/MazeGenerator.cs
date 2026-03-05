@@ -281,8 +281,11 @@ public class MazeGenerator : MonoBehaviour
         // Spawn en el centro de la celda de cada esquina
         // Usamos _width-2 y _height-2 para evitar la pared exterior
         float half = _cellSize / 2f;
-        pacManSpawnPos = new Vector3(half, 0.5f, half);
-        ghostSpawnPos = new Vector3((_width - 2) * _cellSize + half, 0.5f,
+        // spawnY: ajusta este valor si el jugador aparece dentro del suelo
+        // 0.5f funciona para jugadores con escala 0.5, subelo a 1f para escala 1
+        float spawnY = 1f;
+        pacManSpawnPos = new Vector3(half, spawnY, half);
+        ghostSpawnPos = new Vector3((_width - 2) * _cellSize + half, spawnY,
                                      (_height - 2) * _cellSize + half);
 
         Debug.Log("[MAZE] pacManSpawn=" + pacManSpawnPos + " ghostSpawn=" + ghostSpawnPos);
