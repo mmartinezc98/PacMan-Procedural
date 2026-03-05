@@ -14,7 +14,7 @@ public class GameState : MonoBehaviour
     [SerializeField] private CameraController _cameraController; // Controlador de camara
 
     [Header("UI")]
-    [SerializeField] private TextMeshProUGUI _infoText;   // Texto informativo 
+    [SerializeField] private TextMeshProUGUI _infoText;   // Texto informativo  
     [SerializeField] private TextMeshProUGUI _coinsText;  // Texto del contador de monedas
     [SerializeField] private TextMeshProUGUI _statusText; // Texto de estado de la partida
     [SerializeField] private GameObject _winPanel;        // Panel de victoria/derrota
