@@ -4,6 +4,14 @@ using UnityEngine;
 
 public class MazeGenerator : MonoBehaviour
 {
+    /*
+     * GENERACION PROCEDURAL DEL MAPA - ProcPac
+     * Tecnica 1: Backtracking recursivo para los pasillos (igual que Maze.cs del ejercicio)
+     * Tecnica 2: Perlin Noise para distribuir monedas y power-ups (igual que PerlinOrigen.cs)
+     *
+     * Para el multijugador: el host genera una semilla y la envia al cliente.
+     * Ambos aplican la misma semilla y obtienen exactamente el mismo mapa.
+     */
 
     #region VARIABLES DE CONFIGURACION
 
@@ -73,12 +81,14 @@ public class MazeGenerator : MonoBehaviour
 
     private void Start()
     {
-        // El host llama a Start() directamente.
-        // El cliente llama a GenerateMap() desde GameState cuando recibe la semilla.
-        if (NetworkManager.Instance != null && NetworkManager.Instance.isHost)
+        // Si no hay NetworkManager generamos directamente (modo prueba sin red)
+        // Con NetworkManager, la generacion la controla GameState para sincronizar
+        // la semilla ANTES de generar el mapa
+        if (NetworkManager.Instance == null)
         {
             GenerateMap();
         }
+        // Si hay NetworkManager, GameState.WaitForConnectionThenStart() llama a GenerateMap()
     }
 
     #endregion
@@ -91,12 +101,33 @@ public class MazeGenerator : MonoBehaviour
     /// </summary>
     public void GenerateMap()
     {
+        // Limpiamos el mapa anterior si existe (evita doble generacion)
+        ClearMap();
         ApplySeed();
         InitGrid();
         GenerateMaze(0, 0);
         PlaceItemsWithPerlin();
         PlaceExit();
         PlaceCamera();
+        Debug.Log("[MAZE] Mapa generado con semilla: " + seed);
+    }
+
+    private void ClearMap()
+    {
+        // Destruimos todas las celdas e items instanciados anteriormente
+        foreach (Transform child in transform)
+            Destroy(child.gameObject);
+
+        // Tambien destruimos monedas, power-ups y salida que no son hijos del MazeGenerator
+        GameObject[] coins = GameObject.FindGameObjectsWithTag("Coin");
+        GameObject[] powerUps = GameObject.FindGameObjectsWithTag("PowerUp");
+        GameObject[] exits = GameObject.FindGameObjectsWithTag("Exit");
+
+        foreach (var obj in coins) Destroy(obj);
+        foreach (var obj in powerUps) Destroy(obj);
+        foreach (var obj in exits) Destroy(obj);
+
+        _grid = null;
     }
 
     #endregion
@@ -247,9 +278,14 @@ public class MazeGenerator : MonoBehaviour
         Vector3 exitPos = new Vector3((_width / 2) * _cellSize, 0.1f, (_height / 2) * _cellSize);
         Instantiate(_exitPrefab, exitPos, Quaternion.identity);
 
-        // Guardamos posiciones de spawn para los jugadores
-        pacManSpawnPos = new Vector3(0f, 0.5f, 0f);
-        ghostSpawnPos = new Vector3((_width - 1) * _cellSize, 0.5f, (_height - 1) * _cellSize);
+        // Spawn en el centro de la celda de cada esquina
+        // Usamos _width-2 y _height-2 para evitar la pared exterior
+        float half = _cellSize / 2f;
+        pacManSpawnPos = new Vector3(half, 0.5f, half);
+        ghostSpawnPos = new Vector3((_width - 2) * _cellSize + half, 0.5f,
+                                     (_height - 2) * _cellSize + half);
+
+        Debug.Log("[MAZE] pacManSpawn=" + pacManSpawnPos + " ghostSpawn=" + ghostSpawnPos);
     }
 
     /// <summary>

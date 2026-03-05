@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class MazeCell : MonoBehaviour
+public class MazeCell
 {
     #region VARIABLES
 
@@ -25,11 +25,24 @@ public class MazeCell : MonoBehaviour
     /// </summary>
     public void RemoveWall(string wallName)
     {
+        if (cellObj == null)
+        {
+            Debug.LogError("MazeCell: cellObj es null!");
+            return;
+        }
+
         Transform wall = cellObj.transform.Find(wallName);
         if (wall != null)
         {
             wall.gameObject.SetActive(false);
         }
+        else
+        {
+            // Si no encuentra la pared, listamos los hijos para ver sus nombres reales
+            Debug.LogWarning("MazeCell: no se encontro '" + wallName + "' en " + cellObj.name
+                + ". Hijos encontrados:");
+            foreach (Transform child in cellObj.transform)
+                Debug.LogWarning("  - '" + child.name + "'");
+        }
     }
 }
-

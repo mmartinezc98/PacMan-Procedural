@@ -18,7 +18,7 @@ public class GameState : MonoBehaviour
     [SerializeField] private CameraController _cameraController;
 
     [Header("UI")]
-    [SerializeField] private TextMeshProUGUI _infoText;    
+    [SerializeField] private TextMeshProUGUI _infoText;    // "Soy PACMAN" / "Soy FANTASMA"
     [SerializeField] private TextMeshProUGUI _coinsText;   // contador monedas
     [SerializeField] private TextMeshProUGUI _statusText;  // estado partida
     [SerializeField] private GameObject _winPanel;    // panel fin partida
@@ -51,14 +51,13 @@ public class GameState : MonoBehaviour
     {
         if (NetworkManager.Instance.isHost)
         {
-            // El host es PacMan y espera a que el cliente se conecte
-            SetupLocalPlayer(isPacMan: true);
+            // El host espera al cliente antes de generar el mapa y los jugadores
+            UpdateInfoText("Esperando jugador...");
             StartCoroutine(WaitForConnectionThenStart());
         }
         else
         {
-            // El cliente es el Fantasma y espera la semilla
-            SetupLocalPlayer(isPacMan: false);
+            // El cliente espera la semilla del host (llega via NetworkManager)
             UpdateInfoText("Conectando...");
         }
     }
@@ -115,6 +114,18 @@ public class GameState : MonoBehaviour
         rivalPlayer.isLocalPlayer = false;
         obj.tag = rivalIsPacMan ? "PacMan" : "Ghost";
 
+        // Anadimos una luz tenue al rival para que sea visible en la niebla de guerra
+        // Esta luz es independiente de la del CameraController (que es mas tenue y roja)
+        GameObject rivalLightObj = new GameObject("RivalSelfLight");
+        rivalLightObj.transform.SetParent(obj.transform);
+        rivalLightObj.transform.localPosition = Vector3.up * 1f;
+        Light rivalSelfLight = rivalLightObj.AddComponent<Light>();
+        rivalSelfLight.type = LightType.Point;
+        rivalSelfLight.range = 1.5f;
+        rivalSelfLight.intensity = 1.5f;
+        rivalSelfLight.color = rivalIsPacMan ? Color.yellow : Color.red;
+        rivalSelfLight.shadows = LightShadows.None;
+
         if (_cameraController != null)
             _cameraController.SetRival(obj.transform);
 
@@ -126,15 +137,29 @@ public class GameState : MonoBehaviour
     #region GENERACION DEL MAPA
 
     /// <summary>
-    /// HOST: espera la conexion del cliente y luego arranca el juego.
+    /// HOST: espera la conexion del cliente, envia la semilla y LUEGO genera el mapa.
+    /// Asi el cliente recibe la semilla antes de que ninguno genere nada.
     /// </summary>
     private IEnumerator WaitForConnectionThenStart()
     {
         UpdateStatusText("Esperando jugador...");
-        yield return new WaitUntil(() => NetworkManager.Instance.isConnected);
 
-        // El mapa ya fue generado por MazeGenerator.Start()
-        // Solo creamos el rival y arrancamos la sincronizacion
+        // Esperamos a que el cliente se conecte
+        yield return new WaitUntil(() => NetworkManager.Instance.isConnected);
+        Debug.Log("[HOST] Cliente conectado, generando mapa...");
+
+        // Generamos la semilla y la enviamos al cliente ANTES de generar el mapa
+        int seed = MazeGenerator.Instance.GenerateNewSeed();
+        NetworkManager.Instance.SendSeed(seed);
+        Debug.Log("[HOST] Semilla enviada: " + seed);
+
+        // Pequeña pausa para que el cliente reciba la semilla
+        yield return new WaitForSeconds(0.3f);
+
+        // Generamos el mapa con esa semilla
+        MazeGenerator.Instance.GenerateMap();
+
+        SetupLocalPlayer(isPacMan: true);
         SetupRivalPlayer(rivalIsPacMan: false);
         StartGame();
     }
@@ -147,6 +172,9 @@ public class GameState : MonoBehaviour
     {
         Debug.Log("[CLIENTE] Generando mapa con semilla: " + MazeGenerator.Instance.seed);
         MazeGenerator.Instance.GenerateMap();
+
+        // CLIENTE es el Fantasma, su rival es PacMan
+        SetupLocalPlayer(isPacMan: false);
         SetupRivalPlayer(rivalIsPacMan: true);
         StartGame();
     }

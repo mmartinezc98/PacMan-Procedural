@@ -55,10 +55,35 @@ public class NetworkManager : MonoBehaviour
 
     private void Awake()
     {
+        // Si ya existe un NetworkManager (viene del menu con DontDestroyOnLoad),
+        // destruimos este y usamos el que ya existe
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
+    {
+        // Si este NO es el singleton activo nos destruimos y no hacemos nada
+        if (Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        // No llamamos a InitConnection() aqui.
+        // El MenuManager lo llama via DelayedInitConnection() con un pequeño retraso.
+        // En pruebas directas sin menu, llamar a InitConnection() manualmente desde el Inspector
+        // o añadir un boton de debug.
+    }
+
+    /// <summary>
+    /// Inicia la conexion. Llamado desde Start() o manualmente desde MenuManager.
+    /// </summary>
+    public void InitConnection()
     {
         if (isHost)
             StartHost();
@@ -79,7 +104,13 @@ public class NetworkManager : MonoBehaviour
         }
     }
 
-    private void OnDestroy() { Disconnect(); }
+    private void OnDestroy()
+    {
+        // Solo desconectamos si somos la instancia activa
+        // Evita que el duplicado destruido corte la conexion del original
+        if (Instance == this)
+            Disconnect();
+    }
     private void OnApplicationQuit() { Disconnect(); }
 
     #endregion
@@ -90,7 +121,23 @@ public class NetworkManager : MonoBehaviour
     {
         try
         {
+            // Cerramos cualquier servidor previo
+            if (_server != null)
+            {
+                _server.Stop();
+                _server = null;
+            }
+
             _server = new TcpListener(IPAddress.Any, port);
+
+            // SO_REUSEADDR: permite reusar el puerto inmediatamente
+            // sin esperar al timeout del SO (TIME_WAIT)
+            _server.Server.SetSocketOption(
+                System.Net.Sockets.SocketOptionLevel.Socket,
+                System.Net.Sockets.SocketOptionName.ReuseAddress,
+                true
+            );
+
             _server.Start();
             Debug.Log("[HOST] Servidor iniciado en puerto " + port + ". Esperando cliente...");
 
@@ -114,16 +161,25 @@ public class NetworkManager : MonoBehaviour
             isConnected = true;
             Debug.Log("[HOST] Cliente conectado!");
 
-            // Generamos semilla y la enviamos al cliente
-            int seed = MazeGenerator.Instance.GenerateNewSeed();
-            SendRaw("{\"type\":\"seed\",\"value\":" + seed + "}");
-
+            // La semilla se envia desde GameState cuando MazeGenerator este listo
             StartReceiving();
         }
         catch (Exception e)
         {
-            Debug.LogError("[HOST] Error esperando cliente: " + e.Message);
+            // WSACancelBlockingCall ocurre al cerrar el servidor mientras espera cliente
+            // Es normal al parar el juego o volver al menu, no es un error real
+            if (_isRunning)
+                Debug.LogError("[HOST] Error esperando cliente: " + e.Message);
         }
+    }
+
+    /// <summary>
+    /// Envia la semilla al cliente. Llamado desde GameState cuando el mapa esta listo.
+    /// </summary>
+    public void SendSeed(int seed)
+    {
+        SendRaw("{\"type\":\"seed\",\"value\":" + seed + "}");
+        Debug.Log("[HOST] Semilla enviada: " + seed);
     }
 
     #endregion
@@ -264,10 +320,14 @@ public class NetworkManager : MonoBehaviour
         {
             if (msg.Contains("\"type\":\"seed\""))
             {
-                int seed = ExtractInt(msg, "value");
-                Debug.Log("[CLIENTE] Semilla recibida: " + seed);
-                MazeGenerator.Instance.seed = seed;
-                GameState.Instance.OnSeedReceived();
+                // El host no procesa su propia semilla, solo el cliente la necesita
+                if (!isHost)
+                {
+                    int seed = ExtractInt(msg, "value");
+                    Debug.Log("[CLIENTE] Semilla recibida: " + seed);
+                    MazeGenerator.Instance.seed = seed;
+                    GameState.Instance.OnSeedReceived();
+                }
             }
             else if (msg.Contains("\"type\":\"pos\""))
             {
