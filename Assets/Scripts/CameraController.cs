@@ -62,9 +62,22 @@ public class CameraController : MonoBehaviour
 
     private void SetupFogOfWar()
     {
-        // Oscurecemos la escena al minimo para simular niebla de guerra
-        RenderSettings.ambientLight = new Color(0.05f, 0.05f, 0.05f);
-        RenderSettings.ambientIntensity = 0.05f;
+        // Oscurecemos la escena completamente para simular niebla de guerra
+        // En Unity 2023 hay que configurar todos los modos de luz ambiental
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = Color.black;
+        RenderSettings.ambientIntensity = 0f;
+        RenderSettings.ambientGroundColor = Color.black;
+        RenderSettings.ambientEquatorColor = Color.black;
+        RenderSettings.ambientSkyColor = Color.black;
+
+        // Desactivamos la luz direccional si existe (el sol por defecto)
+        Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+        foreach (Light l in lights)
+        {
+            if (l.type == LightType.Directional)
+                l.enabled = false;
+        }
 
         // Luz del jugador: ilumina su zona con sombras suaves
         if (_playerLight != null)
@@ -154,6 +167,15 @@ public class CameraController : MonoBehaviour
         _lightRadius = radius;
         if (_playerLight != null)
             _playerLight.range = radius;
+    }
+
+    /// <summary>
+    /// Devuelve la luz del jugador para que PlayerController la controle
+    /// durante la invisibilidad.
+    /// </summary>
+    public Light GetPlayerLight()
+    {
+        return _playerLight;
     }
 
     #endregion

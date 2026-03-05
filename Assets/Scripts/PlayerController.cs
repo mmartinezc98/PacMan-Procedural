@@ -6,8 +6,8 @@ public class PlayerController : MonoBehaviour
     #region VARIABLES
 
     [Header("Configuracion del jugador")]
-    public bool isPacMan = true;   // true = PacMan | false = Fantasma
-    public bool isLocalPlayer = false;  // true = lo controla esta maquina
+    public bool isPacMan = true;
+    public bool isLocalPlayer = false;
 
     [Header("Movimiento")]
     public float speed = 5f;
@@ -19,7 +19,9 @@ public class PlayerController : MonoBehaviour
 
     [Header("Power-Up invisibilidad")]
     [SerializeField] private float _invisibilityDuration = 5f;
-    [SerializeField] private GameObject _invisibilityIndicator; // efecto visual (opcional)
+
+    // Referencia a la luz de la camara (se asigna desde CameraController)
+    [HideInInspector] public Light playerLight;
 
     private Rigidbody _rb;
 
@@ -36,13 +38,11 @@ public class PlayerController : MonoBehaviour
             _rb.constraints = RigidbodyConstraints.FreezePositionY
                                | RigidbodyConstraints.FreezeRotation;
         }
-
         Debug.Log("Jugador iniciado como: " + (isPacMan ? "PACMAN" : "FANTASMA"));
     }
 
     private void FixedUpdate()
     {
-        // Solo movemos si es el jugador local (el remoto se mueve por red)
         if (!isLocalPlayer) return;
 
         float h = Input.GetAxisRaw("Horizontal");
@@ -62,20 +62,27 @@ public class PlayerController : MonoBehaviour
             coinsCollected++;
             Destroy(other.gameObject);
             Debug.Log("Moneda recogida: " + coinsCollected);
+
+            // Avisamos al GameState para que compruebe si ya se recogieron todas
+            GameState.Instance.OnCoinCollected();
         }
 
-        // PacMan recoge power-up de invisibilidad
+        // PacMan recoge power-up -> invisibilidad
         if (isPacMan && other.CompareTag("PowerUp"))
         {
             Destroy(other.gameObject);
             StartCoroutine(ActivateInvisibility());
         }
 
-        // PacMan llega a la salida
+        // PacMan llega a la salida (solo si esta activa)
         if (isPacMan && other.CompareTag("Exit"))
         {
-            hasFoundExit = true;
-            Debug.Log("PacMan llego a la salida!");
+            if (GameState.Instance.exitActive)
+            {
+                hasFoundExit = true;
+                Debug.Log("PacMan llego a la salida!");
+                GameState.Instance.PacManWins();
+            }
         }
 
         // Fantasma atrapa a PacMan
@@ -85,50 +92,91 @@ public class PlayerController : MonoBehaviour
             if (rival != null && !rival.isInvisible)
             {
                 Debug.Log("Fantasma atrapo a PacMan!");
-                if (GameState.Instance != null)
-                    GameState.Instance.GhostWins();
+                GameState.Instance.GhostWins();
             }
         }
     }
 
     #endregion
 
-    #region POWER-UP
+    #region POWER-UP INVISIBILIDAD
 
     private IEnumerator ActivateInvisibility()
     {
         isInvisible = true;
 
-        if (_invisibilityIndicator != null)
-            _invisibilityIndicator.SetActive(true);
+        // Apagamos la luz del jugador para que el fantasma no le vea
+        if (playerLight != null)
+            playerLight.enabled = false;
 
-        Debug.Log("Power-Up activado: invisibilidad por " + _invisibilityDuration + "s");
+        // Hacemos al jugador semitransparente visualmente
+        SetTransparency(0.2f);
+
+        Debug.Log("Invisibilidad activada por " + _invisibilityDuration + "s");
 
         yield return new WaitForSeconds(_invisibilityDuration);
 
         isInvisible = false;
 
-        if (_invisibilityIndicator != null)
-            _invisibilityIndicator.SetActive(false);
+        // Volvemos a encender la luz
+        if (playerLight != null)
+            playerLight.enabled = true;
+
+        // Volvemos a la opacidad normal
+        SetTransparency(1f);
+
+        Debug.Log("Invisibilidad desactivada");
+    }
+
+    /// <summary>
+    /// Cambia la transparencia del jugador para indicar visualmente la invisibilidad.
+    /// </summary>
+    private void SetTransparency(float alpha)
+    {
+        Renderer rend = GetComponent<Renderer>();
+        if (rend == null) return;
+
+        // Necesitamos el modo transparente del shader
+        Material mat = rend.material;
+        Color color = mat.color;
+        color.a = alpha;
+
+        if (alpha < 1f)
+        {
+            mat.SetFloat("_Mode", 3); // Transparent
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.renderQueue = 3000;
+        }
+        else
+        {
+            mat.SetFloat("_Mode", 0); // Opaque
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+            mat.SetInt("_ZWrite", 1);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.DisableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.renderQueue = -1;
+        }
+
+        mat.color = color;
     }
 
     #endregion
 
     #region SINCRONIZACION DE RED
 
-    /// <summary>
-    /// Actualiza la posicion del jugador remoto con datos recibidos por red.
-    /// Equivalente a CambiarValorEnRed() del ejercicio de variables con Photon.
-    /// </summary>
     public void UpdateRemotePosition(Vector3 newPosition)
     {
         if (!isLocalPlayer)
             transform.position = newPosition;
     }
 
-    /// <summary>
-    /// Actualiza el estado del jugador remoto (invisibilidad, monedas).
-    /// </summary>
     public void UpdateRemoteState(bool invisible, int coins)
     {
         if (!isLocalPlayer)
