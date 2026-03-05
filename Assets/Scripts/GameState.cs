@@ -14,7 +14,7 @@ public class GameState : MonoBehaviour
     [SerializeField] private CameraController _cameraController; // Controlador de camara
 
     [Header("UI")]
-    [SerializeField] private TextMeshProUGUI _infoText;   // Texto informativo (ej: "Soy PACMAN")
+    [SerializeField] private TextMeshProUGUI _infoText;   // Texto informativo 
     [SerializeField] private TextMeshProUGUI _coinsText;  // Texto del contador de monedas
     [SerializeField] private TextMeshProUGUI _statusText; // Texto de estado de la partida
     [SerializeField] private GameObject _winPanel;        // Panel de victoria/derrota
@@ -342,7 +342,7 @@ public class GameState : MonoBehaviour
     #region CONDICIONES DE VICTORIA
 
     /// <summary>
-    /// El Fantasma gana (atrapo a PacMan).
+    /// El Fantasma gana
     /// Envia el evento por red y muestra el resultado en ambas pantallas.
     /// </summary>
     public void GhostWins()
@@ -380,7 +380,7 @@ public class GameState : MonoBehaviour
     #region UI
 
     /// <summary>
-    /// Actualiza el texto informativo superior (ej: "Soy PACMAN").
+    /// Actualiza el texto informativo superior
     /// </summary>
     private void UpdateInfoText(string text)
     {
@@ -388,7 +388,7 @@ public class GameState : MonoBehaviour
     }
 
     /// <summary>
-    /// Actualiza el texto de estado de la partida (ej: "Partida en curso!").
+    /// Actualiza el texto de estado de la partida
     /// </summary>
     private void UpdateStatusText(string text)
     {
